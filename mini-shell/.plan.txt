@@ -1,0 +1,4 @@
+1. get command with scanf
+2. check if it is in a command list
+3. run command if it exist
+
