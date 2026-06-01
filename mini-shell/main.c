@@ -3,22 +3,49 @@
 
 #include "functions.h"
 
+int getcommand(char *buffer);
+
 int main()
 {
-  char *buffer;
+  char buffer[256];
+  int len = sizeof(commands)/sizeof(commands[0]);
+  int err = 1;
   while (1)
   {
+    getcommand(buffer);
+    for (int i = 0; i < len; i++)
+    {
+      if (!strcmp(buffer, commands[i]))
+      {
+        err = 0;
+        break; 
+      }
+    }
+    if(err == 1)
+    {
+      printf("Command doesn't exist\n");
+      continue;
+    }
+    else
+    {
+      printf("Command exist\n");
+    }
+
+    err = 1;
   }
   return 0;
 }
 
-int getcommand(const char *buffer)
+int getcommand(char buffer[])
 {
   int c;
-  while((c = getchar()) != '\n' && c != EOF)
+  int i = 0;
+  while((c = getchar()) != EOF && c != '\n')
   {
-
+    buffer[i] = c;
+    i++;
   }
+  buffer[i] = '\0';
   return 0;
 }
 
