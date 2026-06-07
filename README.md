@@ -4,4 +4,4 @@
 - xor encoder and decoder 
 - hex-dump
 - mini-shell [UNFINISHED]
-
+- file-share [UNFINISHED]
