@@ -17,9 +17,14 @@ void handle_sigint(int sig)
     exit(sig);
 }
 
+struct mime_type {
+    char *ext;
+    char *mime;
+};
+
+
 int main(int argc, char **argv)
 {
-
   //read arguments
   if (argc != 2)
   {
@@ -47,7 +52,29 @@ int main(int argc, char **argv)
   int server_fd, client_fd;                  //sockets
   struct sockaddr_in address;                //address struct
   int addrlen = sizeof(address);             //get len of address struct
-  char buffer[BUFFER_SIZE] = {0};
+  char client_buffer[BUFFER_SIZE] = {0};
+  char *ext = strrchr(filename, '.');
+  char *mime = "application/octet-stream";
+  char cont_disp[256];
+  snprintf(cont_disp, 256, "Content-Disposition: attachment; filename=\"%s\"\r\n", filename);
+
+  //mime types 
+  static struct mime_type mime_types[] = {
+    {".html", "text/html"},
+    {".txt",  "text/plain"},
+    {".png",  "image/png"},
+    {".jpg",  "image/jpeg"},
+    {".jpeg", "image/jpeg"},
+    {".gif",  "image/gif"},
+  };
+  for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]); i++)
+  {
+    if (strcmp(ext, mime_types[i].ext) == 0)
+    {
+        mime = mime_types[i].mime;
+        cont_disp[0] = '\0';
+    }
+  }
 
   //creating socket
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -110,42 +137,59 @@ int main(int argc, char **argv)
     }
   }
   printf("\n");
+  freeifaddrs(ifaddr);
 
   signal(SIGINT, handle_sigint);
 
   while(1) {
+
     client_fd = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
     if (client_fd < 0)
     {
       perror("Accept failed");
       continue;
     }
-    memset(buffer, 0, BUFFER_SIZE);
-    read(client_fd, buffer, BUFFER_SIZE);
-    printf("Data from user:\n%s\n", buffer);
+    memset(client_buffer, 0, BUFFER_SIZE);
+    read(client_fd, client_buffer, BUFFER_SIZE);
+    printf("Data from user:\n%s\n", client_buffer);
 
-    char http_response[4096];
-    snprintf(http_response, sizeof(http_response),
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: application/octet-stream\r\n"
-    "Content-Disposition: attachment; filename=\"%s\"\r\n"
-    "Content-Length:%ld\r\n"
-    "\r\n",
-    filename, filesize);
-    send(client_fd, http_response, strlen(http_response), 0);
-    int bytes_read = 0;
-    fseek(fp, 0, SEEK_SET);
-    while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0)
+    char html[4096];
+    snprintf(html, 4096, "<html><body><a href=\"/%s\">%s</a></body></html>\n", filename, filename);
+    char home_http[4096];
+    snprintf(home_http, sizeof(home_http),
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
+        "Content-Length:%ld\r\n\r\n", strlen(html));
+
+    char file_http[4096];
+    snprintf(file_http, 4096, 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: %s\r\n"
+        "%s"
+        "Content-Length:%ld\r\n\r\n", mime, cont_disp, filesize);
+    char getfile[1024];
+    snprintf(getfile, 1024, "GET /%s HTTP/1.1", filename);
+
+    int bytes_read;
+    char buffer[4096];
+
+    if (strncmp(client_buffer, getfile, strlen(getfile)) != 0)
     {
-      send(client_fd, buffer, bytes_read, 0);
+      send(client_fd, home_http, strlen(home_http), 0);
+      send(client_fd, html, strlen(html), 0);
     }
-
+    else {
+      fseek(fp, 0, SEEK_SET);
+      send(client_fd, file_http, strlen(file_http), 0);
+      while ((bytes_read = fread(buffer, 1, BUFFER_SIZE, fp)) > 0)
+      {
+        send(client_fd, buffer, bytes_read, 0);
+      }
+    }
     close (client_fd);
   }
 
   //close all
   close(server_fd);
   fclose(fp);
-  freeifaddrs(ifaddr);
   return 0;
 }
