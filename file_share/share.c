@@ -26,15 +26,17 @@ struct mime_type {
 int main(int argc, char **argv)
 {
   //read arguments
-  if (argc != 2)
+  if (argc < 2 && argc > 256)
   {
-    printf("USAGE: ./share <path-to-file>");
+    printf("USAGE: ./share <path-to-file> ...");
     exit(EXIT_FAILURE);
   }
-  char *file = argv[1]; //set file to first argument
+  char **files = argv+1;
+
+  int i = 0;
 
   //open file
-  FILE *fp = fopen(file, "rb");
+  FILE *fp = fopen(files[i], "rb");
   if (!fp)
   {
     perror("No such file");
@@ -47,16 +49,22 @@ int main(int argc, char **argv)
   fseek(fp, 0, SEEK_SET);
 
   //varibles
-  char* filename = strrchr(file, '/');       //filename from path
-  filename = filename ? filename + 1 : file; //remove '/' or return filepath if there is no '/'
+  char filenames[sizeof(files)][256];
+
+  for (int k = 0; k < sizeof(files); k++)
+  {
+    strncpy(filenames[k], strrchr(files[k], '/'), 255);     //filename from path
+    filenames[k] ? strncpy(filenames[k], filenames[k] +1, 255) : strncpy(filenames[k], files[k], 255);
+  }
   int server_fd, client_fd;                  //sockets
   struct sockaddr_in address;                //address struct
   int addrlen = sizeof(address);             //get len of address struct
   char client_buffer[BUFFER_SIZE] = {0};
-  char *ext = strrchr(filename, '.');
-  char *mime = "application/octet-stream";
+
+  char exts[sizeof(files)][8];
+  char mimes[sizeof(files)][64];
   char cont_disp[256];
-  snprintf(cont_disp, 256, "Content-Disposition: attachment; filename=\"%s\"\r\n", filename);
+  snprintf(cont_disp, 256, "Content-Disposition: attachment; filename=\"%s\"\r\n", filenames[i]);
 
   //mime types 
   static struct mime_type mime_types[] = {
@@ -67,15 +75,18 @@ int main(int argc, char **argv)
     {".jpeg", "image/jpeg"},
     {".gif",  "image/gif"},
   };
-  for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]); i++)
+
+  for (int e = 0; e < sizeof(files); e++)
   {
-    if (strcmp(ext, mime_types[i].ext) == 0)
+    for (size_t k = 0; k < sizeof(mime_types)/sizeof(mime_types[0]); k++)
     {
-        mime = mime_types[i].mime;
-        cont_disp[0] = '\0';
+      if (strcmp(exts[e], mime_types[k].ext) == 0)
+      {
+          strncpy(mimes[k], mime_types[k].mime, 255);
+          cont_disp[0] = '\0';
+      }
     }
   }
-
   //creating socket
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
   {
@@ -154,7 +165,7 @@ int main(int argc, char **argv)
     printf("Data from user:\n%s\n", client_buffer);
 
     char html[4096];
-    snprintf(html, 4096, "<html><body><a href=\"/%s\">%s</a></body></html>\n", filename, filename);
+    snprintf(html, 4096, "<html><body><a href=\"/%s\">%s</a></body></html>\n", filenames[i], filenames[i]);
     char home_http[4096];
     snprintf(home_http, sizeof(home_http),
         "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
@@ -165,9 +176,9 @@ int main(int argc, char **argv)
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: %s\r\n"
         "%s"
-        "Content-Length:%ld\r\n\r\n", mime, cont_disp, filesize);
+        "Content-Length:%ld\r\n\r\n", mimes[i], cont_disp, filesize);
     char getfile[1024];
-    snprintf(getfile, 1024, "GET /%s HTTP/1.1", filename);
+    snprintf(getfile, 1024, "GET /%s HTTP/1.1", filenames[i]);
 
     int bytes_read;
     char buffer[4096];
